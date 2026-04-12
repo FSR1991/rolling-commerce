@@ -9,9 +9,13 @@ import {
 
 const router = express.Router();
 
-router.post("/", createProduct);
+//Rutas públicas
 router.get("/", getProducts);
 router.get("/:id", getProductById);
+
+//Rutas privadas
+//TODO: Agregar auth middleware
+router.post("/", createProduct);
 router.put("/:id", updateProduct);
 router.delete("/:id", deleteProduct);
 

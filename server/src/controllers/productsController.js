@@ -21,15 +21,26 @@ const createProduct = async (req, res) => {
   }
 };
 
+// @desc    Get all products
+// @route   GET /api/products
+// @access  Public
 const getProducts = async (req, res) => {
   try {
-    const products = await Product.find({});
+    const { category } = req.query;
+    let filter = {};
+    if (category) {
+      filter.category = category;
+    }
+    const products = await Product.find(filter);
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+// @desc    Get product by ID
+// @route   GET /api/products/:id
+// @access  Public
 const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -43,6 +54,9 @@ const getProductById = async (req, res) => {
   }
 };
 
+// @desc    Update a product
+// @route   PUT /api/products/:id
+// @access  Private
 const updateProduct = async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
@@ -58,6 +72,9 @@ const updateProduct = async (req, res) => {
   }
 };
 
+// @desc    Delete a product
+// @route   DELETE /api/products/:id
+// @access  Private
 const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
