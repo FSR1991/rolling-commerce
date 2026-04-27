@@ -5,6 +5,7 @@ import connectDB from "./src/config/db.js";
 // import authRoutes from "./src/routes/authRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import cartRoutes from "./src/routes/cartRoutes.js";
+import orderRoutes from "./src/routes/orderRoutes.js";
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(express.json());
 // app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/cart",cartRoutes);
+app.use("/api/orders", orderRoutes);
 
 
 //ruta base
