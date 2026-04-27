@@ -16,7 +16,7 @@ app.use(express.json());
 connectDB();
 
 app.get("/", (req, res) => {
-  res.send("API funcionando");
+  res.send("API is running");
 });
 
 // routes
@@ -24,5 +24,5 @@ app.use("/api/products", productRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
