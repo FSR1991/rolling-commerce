@@ -1,0 +1,29 @@
+// Todas las rutas requieren token JWT — header: Authorization: Bearer <token>
+// protect  → verifica token y carga req.user
+// admin    → verifica que req.user.role === "admin", siempre después de protect/
+// Endpoints:
+// POST   /api/orders               → crea orden desde el carrito
+// GET    /api/orders               → lista órdenes del usuario logueado
+// GET    /api/orders/:id           → detalle de una orden (usuario propio o admin)
+// PUT    /api/orders/:id/status    → actualiza estado (solo admin)
+
+import express from "express";
+import {
+  createOrder,
+  getOrders,
+  getOrderById,
+  updateOrderStatus,
+} from "../controllers/orderController.js";
+import { protect, admin } from "../middlewares/authMiddlewares.js";
+
+const router = express.Router();
+
+router.post("/", protect, createOrder);
+
+router.get("/", protect, getOrders);
+
+router.get("/:id", protect, getOrderById);
+
+router.put("/:id/status", protect, admin, updateOrderStatus);
+
+export default router;
