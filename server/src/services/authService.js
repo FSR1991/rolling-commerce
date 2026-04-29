@@ -1,48 +1,47 @@
-const User = require('../models/users');
-const { hashPassword, comparePassword } = require('../utils/hashPassword');
-const generateToken = require('../utils/generateToken');
+﻿import User from "../models/users.js";
+import generateToken from "../utils/generateToken.js";
 
-const registerUser = async ({ username, email, password }) => {
-const existingUser = await User.findOne({
-  $or: [{ email }, { username }],
-});
+const registerUser = async ({ name, email, password }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const existingUser = await User.findOne({
+    $or: [{ email: normalizedEmail }, { name }],
+  });
 
-if (existingUser) {
-  if (existingUser.email === email) {
-    throw new Error('El email ya está registrado');
+  if (existingUser) {
+    if (existingUser.email === normalizedEmail) {
+      throw new Error("El email ya está registrado");
+    }
+
+    if (existingUser.name === name) {
+      throw new Error("El nombre ya está en uso");
+    }
   }
-
-  if (existingUser.username === username) {
-    throw new Error('El nombre de usuario ya está en uso');
-  }
-}
-
-  const hashedPassword = await hashPassword(password);
 
   const user = await User.create({
-    username,
-    email,
-    password: hashedPassword,
+    name,
+    email: normalizedEmail,
+    password,
   });
 
   return user.toPublicJSON();
 };
 
 const loginUser = async ({ email, password }) => {
-  const user = await User.findOne({ email }).select('+password'); /* password solicitado explicitamente retorna con undefined por el campo select false  */
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
   if (!user) {
-    throw new Error('Credenciales inválidas');
+    throw new Error("Credenciales inválidas");
   }
 
   if (!user.isActive) {
-    throw new Error('Tu cuenta está desactivada');
+    throw new Error("Tu cuenta está desactivada");
   }
 
-  const isMatch = await comparePassword(password, user.password);
+  const isMatch = await user.comparePassword(password);
 
   if (!isMatch) {
-    throw new Error('Credenciales inválidas');
+    throw new Error("Credenciales inválidas");
   }
 
   const token = generateToken(user);
@@ -53,7 +52,4 @@ const loginUser = async ({ email, password }) => {
   };
 };
 
-module.exports = {
-  registerUser,
-  loginUser,
-};
+export { registerUser, loginUser };

@@ -1,62 +1,54 @@
-const mongoose = require('mongoose');
+﻿import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const userSchema = new mongoose.Schema(
   {
-    username: {
+    name: {
       type: String,
-      required: [true, 'El nombre de usuario es obligatorio'],
+      required: true,
       trim: true,
-      minlength: [3, 'Debe tener al menos 3 caracteres'],
-      maxlength: [20, 'No puede superar los 20 caracteres'],
-      unique: true,
     },
     email: {
       type: String,
-      required: [true, 'El email es obligatorio'],
+      required: true,
       unique: true,
       trim: true,
       lowercase: true,
-      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Email inválido'],
     },
     password: {
       type: String,
-      required: [true, 'La contraseña es obligatoria'],
-      minlength: [6, 'La contraseña debe tener al menos 6 caracteres'],
+      required: true,
       select: false,
     },
     role: {
       type: String,
-      enum: {
-        values: ['user', 'admin'],
-        message: 'Rol no válido: {VALUE}',
-      },
-      default: 'user',
+      enum: ["user", "admin"],
+      default: "user",
     },
     isActive: {
       type: Boolean,
       default: true,
     },
-    resetPasswordToken: {
-      type: String,
-      select: false,
-    },
-    resetPasswordExpires: {
-      type: Date,
-      select: false,
-    },
   },
   {
     timestamps: true,
-    versionKey: false,
   }
 );
 
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+});
 
-/* Metodo de instancia  */
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
 userSchema.methods.toPublicJSON = function () {
   return {
     id: this._id,
-    username: this.username,
+    name: this.name,
     email: this.email,
     role: this.role,
     isActive: this.isActive,
@@ -64,4 +56,6 @@ userSchema.methods.toPublicJSON = function () {
   };
 };
 
-module.exports = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema);
+
+export default User;
