@@ -8,6 +8,7 @@ import Login from '../pages/login';
 import Register from '../pages/register';
 import AdminDashboard from '../pages/adminDashboard';
 import NotFound from '../pages/not found404';
+import BuildYourPc from '../pages/build-your-pc';
 
 export const router = createBrowserRouter([
   {
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
       {
         path: '*',
         element: <NotFound />,
+      },
+      {
+        path: 'build-your-pc',
+        element: <BuildYourPc />,
       },
     ],
   },
