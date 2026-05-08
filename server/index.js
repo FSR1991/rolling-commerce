@@ -9,6 +9,8 @@ import orderRoutes from "./src/routes/orderRoutes.js";
 import productRoutes from "./src/routes/productRoutes.js";
 import categoryRoutes from "./src/routes/categoryRoutes.js";
 import { errorHandler, notFound } from "./src/middlewares/errorMiddlewares.js";
+import { createPreference } from "./mercadopago.js";
+
 
 dotenv.config();
 
@@ -45,3 +47,8 @@ connectDB().then(() => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
   });
 });
+
+app.post("/create-preference", async (req, res) => {
+    const preferenceId = await createPreference();
+    res.json({ id: preferenceId });
+})

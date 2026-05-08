@@ -15,6 +15,7 @@ import {
   updateOrderStatus,
 } from "../controllers/orderController.js";
 import { protect, admin } from "../middlewares/authMiddlewares.js";
+import { createPreference } from "../../mercadopago.js";
 
 const router = express.Router();
 
@@ -25,5 +26,19 @@ router.get("/", protect, getOrders);
 router.get("/:id", protect, getOrderById);
 
 router.put("/:id/status", protect, admin, updateOrderStatus);
+
+// Nueva ruta para crear preferencia de MercadoPago
+router.post("/create-preference", protect, async (req, res) => {
+  try {
+    const { items, backUrls } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items are required" });
+    }
+    const preferenceId = await createPreference(items, backUrls);
+    res.json({ preferenceId });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 export default router;

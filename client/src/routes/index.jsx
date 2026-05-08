@@ -11,6 +11,10 @@ import NotFound from '../pages/not-found-404';
 import ProtectedRoute from '../components/protectedRoute';
 import BuildYourPc from '../pages/build-your-pc';
 import Profile from '../pages/profile';
+import Checkout from '../pages/checkout';
+import PaymentSuccess from '../pages/PaymentSuccess';
+import PaymentFailure from '../pages/PaymentFailure';
+import PaymentPending from '../pages/PaymentPending';
 import Loader from '../components/Loader';
 
 export const router = createBrowserRouter([
@@ -37,6 +41,26 @@ export const router = createBrowserRouter([
             <Cart />
          /* </ProtectedRoute>*/ //sacar comentarios para porteger rutas//
         ),
+      },
+      {
+        path: 'checkout',
+        element: (
+          <ProtectedRoute>
+            <Checkout />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'success',
+        element: <PaymentSuccess />,
+      },
+      {
+        path: 'failure',
+        element: <PaymentFailure />,
+      },
+      {
+        path: 'pending',
+        element: <PaymentPending />,
       },
       {
         path: 'login',
