@@ -36,6 +36,7 @@ if (import.meta.env.PROD || import.meta.env.VITE_DEBUG_API === 'true') {
 }
 
 const TOKEN_STORAGE_KEY = 'rolling-commerce-token';
+let unauthorizedHandler = null;
 
 export class ApiError extends Error {
   constructor(message, status, data) {
@@ -56,6 +57,10 @@ export const setStoredToken = (token) => {
 
 export const clearStoredToken = () => {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+};
+
+export const setUnauthorizedHandler = (handler) => {
+  unauthorizedHandler = typeof handler === 'function' ? handler : null;
 };
 
 const buildUrl = (endpoint = '', params) => {
@@ -93,11 +98,16 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   if (!response.ok) {
     const backendMessage = data?.message || 'Request failed';
-    const authMessages = new Set(['invalid token', 'unauthorized', 'User unauthorized']);
+    const normalizedBackendMessage = String(backendMessage).toLowerCase();
+    const authMessages = new Set(['invalid token', 'unauthorized', 'user unauthorized']);
     const message =
-      response.status === 401 && authMessages.has(backendMessage)
+      response.status === 401 && authMessages.has(normalizedBackendMessage)
         ? 'Tu sesion expiro o no es valida. Volve a iniciar sesion.'
         : backendMessage;
+
+    if (response.status === 401 && token) {
+      unauthorizedHandler?.();
+    }
 
     throw new ApiError(message, response.status, data);
   }
