@@ -1,23 +1,139 @@
 import Product from "../models/products.js";
 import mongoose from "mongoose";
+import { NUMBER_LIMITS, VALIDATION_LIMITS } from "../constants/validationLimits.js";
+import { parseLimitedNumber, sanitizeLimitedString } from "../utils/validators.js";
+
+const BUILD_PC_CATEGORIES = new Set([
+  "processors",
+  "graphics-cards",
+  "ram",
+  "storage",
+  "power-supplies",
+  "cases",
+]);
+
+const normalizeText = (value = "") =>
+  String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const CATEGORY_ALIASES = new Map([
+  ["procesador", "processors"],
+  ["procesadores", "processors"],
+  ["cpu", "processors"],
+  ["processor", "processors"],
+  ["processors", "processors"],
+  ["placa de video", "graphics-cards"],
+  ["placas de video", "graphics-cards"],
+  ["gpu", "graphics-cards"],
+  ["tarjeta grafica", "graphics-cards"],
+  ["tarjetas graficas", "graphics-cards"],
+  ["graphics card", "graphics-cards"],
+  ["graphics-cards", "graphics-cards"],
+  ["ram", "ram"],
+  ["memoria ram", "ram"],
+  ["memory", "ram"],
+  ["disco", "storage"],
+  ["ssd", "storage"],
+  ["hdd", "storage"],
+  ["almacenamiento", "storage"],
+  ["storage", "storage"],
+  ["nvme", "storage"],
+  ["fuente", "power-supplies"],
+  ["fuentes", "power-supplies"],
+  ["psu", "power-supplies"],
+  ["power supply", "power-supplies"],
+  ["power-supplies", "power-supplies"],
+  ["gabinete", "cases"],
+  ["gabinetes", "cases"],
+  ["case", "cases"],
+  ["cases", "cases"],
+  ["chasis", "cases"],
+  ["chassis", "cases"],
+]);
+
+const normalizeCategory = (category) => {
+  const sanitizedCategory = sanitizeLimitedString(category, "category", VALIDATION_LIMITS.productName, {
+    required: true,
+  });
+  const normalized = normalizeText(sanitizedCategory);
+
+  if (BUILD_PC_CATEGORIES.has(normalized)) {
+    return normalized;
+  }
+
+  return CATEGORY_ALIASES.get(normalized) || sanitizedCategory;
+};
+
+const parseBoolean = (value, defaultValue = true) => {
+  if (value === undefined || value === null || value === "") return defaultValue;
+  if (typeof value === "boolean") return value;
+  return ["true", "1", "yes", "on"].includes(String(value).toLowerCase());
+};
+
+const parseSpecs = (specs) => {
+  if (!specs) return [];
+  if (Array.isArray(specs)) {
+    return specs
+      .map((item) => sanitizeLimitedString(String(item), "spec", VALIDATION_LIMITS.comments))
+      .filter(Boolean);
+  }
+
+  if (typeof specs === "string") {
+    try {
+      const parsedSpecs = JSON.parse(specs);
+      if (Array.isArray(parsedSpecs)) {
+        return parsedSpecs
+          .map((item) => sanitizeLimitedString(String(item), "spec", VALIDATION_LIMITS.comments))
+          .filter(Boolean);
+      }
+    } catch {
+      return specs
+        .split(",")
+        .map((item) => sanitizeLimitedString(item, "spec", VALIDATION_LIMITS.comments))
+        .filter(Boolean);
+    }
+  }
+
+  return [];
+};
 
 const validateProductData = (data) => {
-  const { name, price, description, image, images = [], category, stock } = data;
-  const parsedStock = Number(stock);
+  const {
+    name,
+    price,
+    description,
+    image,
+    imageUrl,
+    publicId,
+    images = [],
+    category,
+    brand,
+    specs,
+    stock,
+    isActive,
+  } = data;
+  const sanitizedName = sanitizeLimitedString(name, "Product name", VALIDATION_LIMITS.productName, {
+    required: true,
+  });
+  const sanitizedDescription = sanitizeLimitedString(
+    description,
+    "Product description",
+    VALIDATION_LIMITS.productDescription,
+    { required: true },
+  );
+  const parsedPrice = parseLimitedNumber(price, "Product price", NUMBER_LIMITS.price);
+  const parsedStock = parseLimitedNumber(stock, "Product stock", {
+    ...NUMBER_LIMITS.stock,
+    integer: true,
+  });
 
-  if (!name || !name.trim()) {
-    throw new Error("Product name is required");
-  }
+  const hasImageValue = typeof image === "string" && image.trim();
+  const hasImageUrlValue = typeof imageUrl === "string" && imageUrl.trim();
 
-  if (price === undefined || price === null || isNaN(price) || price < 0) {
-    throw new Error("Product price must be a valid positive number");
-  }
-
-  if (!description || !description.trim()) {
-    throw new Error("Product description is required");
-  }
-
-  if (!image?.trim() && (!Array.isArray(images) || images.length === 0)) {
+  if (!hasImageValue && !hasImageUrlValue && (!Array.isArray(images) || images.length === 0)) {
     throw new Error("At least one product image is required");
   }
 
@@ -26,44 +142,53 @@ const validateProductData = (data) => {
   }
 
   const normalizedImages = images.map((item) => {
-    if (!item?.url?.trim() || !item?.public_id?.trim()) {
+    const itemPublicId = item?.public_id || item?.publicId;
+
+    if (!item?.url?.trim() || !itemPublicId?.trim()) {
       throw new Error("Each product image must include url and public_id");
     }
 
     return {
-      url: item.url.trim(),
-      public_id: item.public_id.trim(),
+      url: sanitizeLimitedString(item.url, "image url", 500, { required: true }),
+      public_id: sanitizeLimitedString(itemPublicId, "image public_id", 200, { required: true }),
+      publicId: sanitizeLimitedString(itemPublicId, "image publicId", 200, { required: true }),
     };
   });
 
-  const primaryImage = image?.trim() || normalizedImages[0]?.url;
+  const primaryImage = imageUrl
+    ? sanitizeLimitedString(imageUrl, "imageUrl", 500, { required: true })
+    : image
+      ? sanitizeLimitedString(image, "image", 500, { required: true })
+      : normalizedImages[0]?.url;
+  const primaryPublicId = publicId
+    ? sanitizeLimitedString(publicId, "publicId", 200, { required: true })
+    : normalizedImages[0]?.public_id || "";
+  const finalImages =
+    normalizedImages.length > 0
+      ? normalizedImages
+      : primaryPublicId
+        ? [{ url: primaryImage, public_id: primaryPublicId, publicId: primaryPublicId }]
+        : [];
 
   if (!primaryImage) {
     throw new Error("Product image URL is required");
   }
 
-  if (!category || !category.trim()) {
-    throw new Error("Product category is required");
-  }
-
-  if (
-    stock === undefined ||
-    stock === null ||
-    stock === "" ||
-    !Number.isInteger(parsedStock) ||
-    parsedStock < 0
-  ) {
-    throw new Error("Product stock must be a non-negative integer");
-  }
+  const normalizedCategory = normalizeCategory(category);
 
   return {
-    name: name.trim(),
-    price: parseFloat(price),
-    description: description.trim(),
+    name: sanitizedName,
+    price: parsedPrice,
+    description: sanitizedDescription,
     image: primaryImage,
-    images: normalizedImages,
-    category: category.trim(),
+    imageUrl: primaryImage,
+    publicId: primaryPublicId,
+    images: finalImages,
+    category: normalizedCategory,
+    brand: brand ? sanitizeLimitedString(brand, "brand", VALIDATION_LIMITS.name) : "",
+    specs: parseSpecs(specs),
     stock: parsedStock,
+    isActive: parseBoolean(isActive, true),
   };
 };
 
@@ -76,17 +201,18 @@ const createProduct = async (productData) => {
   return createdProduct.toJSON();
 };
 
-const getProducts = async ({ category = null, search = null } = {}) => {
-  const filter = {};
+const getProducts = async ({ category = null, search = null, includeInactive = false } = {}) => {
+  const filter = includeInactive ? {} : { isActive: { $ne: false } };
 
   if (category && category.trim()) {
-    filter.category = category.trim();
+    filter.category = normalizeCategory(category);
   }
 
   if (search && search.trim()) {
+    const sanitizedSearch = sanitizeLimitedString(search, "search", VALIDATION_LIMITS.search);
     filter.$or = [
-      { name: { $regex: search.trim(), $options: "i" } },
-      { description: { $regex: search.trim(), $options: "i" } },
+      { name: { $regex: sanitizedSearch, $options: "i" } },
+      { description: { $regex: sanitizedSearch, $options: "i" } },
     ];
   }
 
@@ -102,7 +228,7 @@ const getProductById = async (productId) => {
 
   const product = await Product.findById(productId);
 
-  if (!product) {
+  if (!product || product.isActive === false) {
     throw new Error("Product not found");
   }
 
@@ -110,7 +236,7 @@ const getProductById = async (productId) => {
 };
 
 const getFeaturedProducts = async (limit = 6) => {
-  const products = await Product.find()
+  const products = await Product.find({ isActive: { $ne: false } })
     .sort({ rating: -1, numReviews: -1 })
     .limit(limit);
 
@@ -122,27 +248,47 @@ const updateProduct = async (productId, updateData) => {
     throw new Error("Invalid product ID format");
   }
 
+  const existingProduct = await Product.findById(productId);
+
+  if (!existingProduct) {
+    throw new Error("Product not found");
+  }
+
+  const hasReplacementImage =
+    (typeof updateData.image === "string" && Boolean(updateData.image.trim())) ||
+    (typeof updateData.imageUrl === "string" && Boolean(updateData.imageUrl.trim())) ||
+    (Array.isArray(updateData.images) && updateData.images.length > 0);
+
+  const imageData = hasReplacementImage
+    ? {
+        image: updateData.image,
+        imageUrl: updateData.imageUrl,
+        publicId: updateData.publicId,
+        images: updateData.images,
+      }
+    : {
+        image: existingProduct.image,
+        imageUrl: existingProduct.imageUrl,
+        publicId: existingProduct.publicId,
+        images: existingProduct.images,
+      };
+
   const validatedData = validateProductData({
     name: updateData.name,
     price: updateData.price,
     description: updateData.description,
-    image: updateData.image,
-    images: updateData.images,
+    ...imageData,
     category: updateData.category,
+    brand: updateData.brand,
+    specs: updateData.specs,
     stock: updateData.stock,
+    isActive: updateData.isActive,
   });
 
-  const product = await Product.findByIdAndUpdate(
-    productId,
-    validatedData,
-    { new: true, runValidators: true }
-  );
+  Object.assign(existingProduct, validatedData);
+  await existingProduct.save();
 
-  if (!product) {
-    throw new Error("Product not found");
-  }
-
-  return product;
+  return existingProduct;
 };
 
 const deleteProduct = async (productId) => {
@@ -156,9 +302,27 @@ const deleteProduct = async (productId) => {
     throw new Error("Product not found");
   }
 
-  await product.deleteOne();
+  product.isActive = false;
+  await product.save();
 
-  return { message: "Product deleted successfully" };
+  return { message: "Product deactivated successfully" };
+};
+const permanentDeleteProductService = async (productId) => {
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    throw new Error("Invalid product ID format");
+  }
+
+  const product = await Product.findById(productId);
+
+  if (!product) {
+    throw new Error("Product not found");
+  }
+
+  await Product.findByIdAndDelete(productId);
+
+  return {
+    message: "Product permanently deleted successfully",
+  };
 };
 
 const decreaseStock = async (productId, quantity) => {
@@ -193,6 +357,7 @@ export {
   getFeaturedProducts,
   updateProduct,
   deleteProduct,
+  permanentDeleteProductService,
   decreaseStock,
   validateProductData,
 };

@@ -1,20 +1,41 @@
 import { useState } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
+import { useAuth } from '../hooks/useAuth';
+import { useCart } from '../hooks/useCart';
 import './navbar.css';
 
-const navLinks = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/products', label: 'Products' },
-  { to: '/build-your-pc', label: 'Build Your PC' },
-  { to: '/cart', label: 'Cart' },
-  { to: '/admin', label: 'Admin' },
-  { to: '/login', label: 'Login' },
-  { to: '/register', label: 'Register' },
+const publicNavLinks = [
+  { to: '/', label: 'Inicio', end: true },
+  { to: '/products', label: 'Productos' },
+  { to: '/about', label: 'Nosotros' },
+  { to: '/contact', label: 'Contacto' },
+  { to: '/build-your-pc', label: 'Armá tu PC' },
 ];
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { isAuthenticated, isAdmin, logout } = useAuth();
+  const { itemCount } = useCart();
+  const navigate = useNavigate();
+
+  const navLinks = [
+    ...publicNavLinks,
+    ...(isAuthenticated ? [{ to: '/cart', label: `Carrito${itemCount ? ` (${itemCount})` : ''}` }] : []),
+    ...(isAdmin ? [{ to: '/admin', label: 'Administración' }] : []),
+    ...(!isAuthenticated
+      ? [
+          { to: '/login', label: 'Ingresar' },
+          { to: '/register', label: 'Registrarse' },
+        ]
+      : []),
+  ];
+
+  const handleLogout = () => {
+    logout();
+    setMenuOpen(false);
+    navigate('/login', { replace: true });
+  };
 
   return (
     <nav className="navbar navbar-expand-lg navbar-dark main-navbar">
@@ -23,7 +44,7 @@ export default function Navbar() {
           <img src={logo} alt="Tech Core" className="brand-logo" />
           <div className="brand-copy">
             <span className="brand-name">Tech Core</span>
-            <span className="brand-tagline d-none d-lg-inline">Tech commerce redefined</span>
+            <span className="brand-tagline d-none d-xl-inline">Hardware premium para tu PC</span>
           </div>
         </Link>
 
@@ -31,7 +52,7 @@ export default function Navbar() {
           className="navbar-toggler custom-toggler"
           type="button"
           aria-expanded={menuOpen}
-          aria-label="Toggle navigation"
+          aria-label="Abrir navegación"
           onClick={() => setMenuOpen((open) => !open)}
         >
           <span className="navbar-toggler-icon" />
@@ -53,6 +74,13 @@ export default function Navbar() {
                 </NavLink>
               </li>
             ))}
+            {isAuthenticated && (
+              <li className="nav-item">
+                <button type="button" className="nav-link custom-link logout-link" onClick={handleLogout}>
+                  Salir
+                </button>
+              </li>
+            )}
           </ul>
         </div>
       </div>

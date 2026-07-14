@@ -4,6 +4,7 @@ import {
   getProductById,
   updateProduct,
   deleteProduct,
+  permanentDeleteProductService,
 } from "../services/productService.js";
 import { uploadImageFile } from "../services/image.service.js";
 
@@ -20,19 +21,19 @@ const buildProductData = async (body, file) => {
   });
 
   productData.image = uploadedImage.url;
+  productData.imageUrl = uploadedImage.url;
+  productData.publicId = uploadedImage.public_id;
   productData.images = [
     {
       url: uploadedImage.url,
       public_id: uploadedImage.public_id,
+      publicId: uploadedImage.public_id,
     },
   ];
 
   return productData;
 };
 
-// @desc    Create a new product
-// @route   POST /api/products
-// @access  Private/Admin
 const createProductController = async (req, res, next) => {
   try {
     const productData = await buildProductData(req.body, req.file);
@@ -43,22 +44,20 @@ const createProductController = async (req, res, next) => {
   }
 };
 
-// @desc    Get all products
-// @route   GET /api/products
-// @access  Public
 const getProductsController = async (req, res, next) => {
   try {
-    const { category, search } = req.query;
-    const products = await getProducts({ category, search });
+    const { category, search, includeInactive } = req.query;
+    const products = await getProducts({ 
+      category, 
+      search, 
+      includeInactive: includeInactive === "true" && req.user?.role === "admin"
+    });
     res.json(products);
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get product by ID
-// @route   GET /api/products/:id
-// @access  Public
 const getProductByIdController = async (req, res, next) => {
   try {
     const product = await getProductById(req.params.id);
@@ -68,9 +67,6 @@ const getProductByIdController = async (req, res, next) => {
   }
 };
 
-// @desc    Update a product
-// @route   PUT /api/products/:id
-// @access  Private/Admin
 const updateProductController = async (req, res, next) => {
   try {
     const productData = await buildProductData(req.body, req.file);
@@ -81,12 +77,21 @@ const updateProductController = async (req, res, next) => {
   }
 };
 
-// @desc    Delete a product
-// @route   DELETE /api/products/:id
-// @access  Private/Admin
 const deleteProductController = async (req, res, next) => {
   try {
     const result = await deleteProduct(req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Permanently delete a product
+// @route   DELETE /api/products/:id/permanent
+// @access  Private/Admin
+const permanentDeleteProductController = async (req, res, next) => {
+  try {
+    const result = await permanentDeleteProductService(req.params.id);
     res.json(result);
   } catch (error) {
     next(error);
@@ -99,4 +104,6 @@ export {
   getProductByIdController as getProductById,
   updateProductController as updateProduct,
   deleteProductController as deleteProduct,
+  permanentDeleteProductController as permanentDeleteProduct,
 };
+  

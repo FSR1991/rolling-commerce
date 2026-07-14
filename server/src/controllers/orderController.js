@@ -9,7 +9,16 @@
 
 import mongoose from "mongoose";
 import Cart from "../models/cart.js";
-import { createOrder, getOrderById, getOrdersByUserId, updateOrderStatus } from "../services/orderService.js";
+import {
+  cancelOrder,
+  createOrder,
+  deleteOrder,
+  getAllOrders,
+  getOrderById,
+  getOrdersByUserId,
+  updateOrderStatus,
+} from "../services/orderService.js";
+import { ORDER_STATUSES } from "../constants/orderStatuses.js";
 
 // Crea una orden a partir del carrito del usuario logueado.
 // Copia los items y precios del carrito, calcula el total y vacía el carrito.
@@ -39,8 +48,47 @@ export const getOrdersController = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const orders = await getOrdersByUserId(req.user._id);
+    const orders = req.user.role === "admin"
+      ? await getAllOrders({ ...req.query, sortBy: req.query.sortBy || "-createdAt" })
+      : await getOrdersByUserId(req.user._id);
+
     res.status(200).json(orders);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAdminOrdersController = async (req, res, next) => {
+  try {
+    const orders = await getAllOrders({
+      ...req.query,
+      sortBy: req.query.sortBy || "-createdAt",
+      populateUser: true,
+    });
+
+    console.info("ADMIN_ORDERS_COUNT", {
+      total: orders.total,
+      page: orders.page,
+      limit: orders.limit,
+      status: req.query.status || null,
+    });
+
+    res.status(200).json(orders);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAdminOrderByIdController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid order ID format" });
+    }
+
+    const order = await getOrderById(id, null, { populateUser: true });
+    res.status(200).json(order);
   } catch (error) {
     next(error);
   }
@@ -83,10 +131,9 @@ export const updateOrderStatusController = async (req, res, next) => {
       return res.status(400).json({ message: "Invalid order ID format" });
     }
 
-    const validStatuses = ["pending", "paid", "cancelled", "delivered"];
-    if (!status || !validStatuses.includes(status)) {
+    if (!status || !ORDER_STATUSES.includes(status)) {
       return res.status(400).json({
-        message: `Status must be one of: ${validStatuses.join(", ")}`,
+        message: `Status must be one of: ${ORDER_STATUSES.join(", ")}`,
       });
     }
 
@@ -97,9 +144,46 @@ export const updateOrderStatusController = async (req, res, next) => {
   }
 };
 
+export const cancelOrderController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid order ID format" });
+    }
+
+    const order = await cancelOrder(id);
+    res.status(200).json(order);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteOrderController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid order ID format" });
+    }
+
+    const deletedOrder = await deleteOrder(id);
+    res.status(200).json({
+      message: "Order deleted successfully",
+      orderId: deletedOrder._id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   createOrderController as createOrder,
   getOrdersController as getOrders,
+  getAdminOrdersController as getAdminOrders,
+  getAdminOrderByIdController as getAdminOrderById,
   getOrderByIdController as getOrderById,
   updateOrderStatusController as updateOrderStatus,
+  cancelOrderController as cancelOrder,
+  deleteOrderController as deleteOrder,
 };

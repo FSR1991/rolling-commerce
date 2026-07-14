@@ -5,8 +5,9 @@ import {
   getProductById,
   updateProduct,
   deleteProduct,
+  permanentDeleteProduct,
 } from "../controllers/productsController.js";
-import { protect, admin } from "../middlewares/authMiddlewares.js";
+import { protect, admin, optionalProtect } from "../middlewares/authMiddlewares.js";
 import {
   productImageUpload,
   handleMulterError,
@@ -15,7 +16,7 @@ import {
 const router = express.Router();
 
 //Rutas públicas
-router.get("/", getProducts);
+router.get("/", optionalProtect, getProducts);
 router.get("/:id", getProductById);
 
 //Rutas privadas - requieren autenticación y rol admin
@@ -35,6 +36,15 @@ router.put(
   handleMulterError,
   updateProduct
 );
+router.patch(
+  "/:id",
+  protect,
+  admin,
+  productImageUpload.single("image"),
+  handleMulterError,
+  updateProduct
+);
 router.delete("/:id", protect, admin, deleteProduct);
+router.delete("/:id/permanent", protect, admin, permanentDeleteProduct);
 
 export default router;

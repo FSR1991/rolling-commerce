@@ -5,6 +5,37 @@
 // El token debe enviarse en el header: Authorization: Bearer <token>
 import jwt from "jsonwebtoken";
 import User from "../models/users.js";
+
+const getBearerToken = (req) => {
+  if (!req.headers.authorization?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  return req.headers.authorization.split(" ")[1] || null;
+};
+
+export const optionalProtect = async (req, res, next) => {
+  const token = getBearerToken(req);
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user || user.isActive === false) {
+      return res.status(401).json({ message: "User unauthorized" });
+    }
+
+    req.user = user;
+    next();
+  } catch {
+    return res.status(401).json({ message: "invalid token" });
+  }
+};
 // Middleware principal de autenticación.
 // Si el token es válido y el usuario está activo, carga req.user y llama a next().
 // Si el token es inválido o el usuario está inactivo, corta la cadena con 401.
@@ -13,7 +44,7 @@ export const protect = async (req, res, next) => {
     let token;
 
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-      token = req.headers.authorization.split(" ")[1];
+      token = getBearerToken(req);
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       

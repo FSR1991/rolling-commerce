@@ -1,5 +1,5 @@
-import {useAuth} from "../hooks/useAuth";
-import Loader from "../components/Loader";
+import { useAuth } from "../hooks/useAuth";
+import Loader from "../components/loader";
 
 function Profile() {
   const { user } = useAuth();
@@ -11,7 +11,7 @@ function Profile() {
       <h2>Perfil</h2>
 
       <div className="card">
-        <p><strong>Email:</strong> {user.email}</p>
+        <p><strong>Correo electrónico:</strong> {user.email}</p>
         <p><strong>ID:</strong> {user._id}</p>
       </div>
     </div>

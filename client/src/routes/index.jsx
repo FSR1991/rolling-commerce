@@ -10,10 +10,13 @@ import AdminDashboard from '../pages/adminDashboard';
 import NotFound from '../pages/not-found-404';
 import ProtectedRoute from '../components/protectedRoute';
 import BuildYourPc from '../pages/build-your-pc';
-import Profile from '../pages/profile';
-import Loader from '../components/Loader';
+import Checkout from '../pages/checkout';
+import PaymentStatus from '../pages/paymentStatus';
+import StaticInfo from '../pages/staticInfo';
+import AboutUs from '../pages/AboutUs';
+import ContactPage from '../pages/ContactPage';
 
-export const router = createBrowserRouter([
+const router = createBrowserRouter([
   {
     path: '/',
     element: <MainLayout />,
@@ -33,9 +36,9 @@ export const router = createBrowserRouter([
       {
         path: 'cart',
         element: (
-          /*<ProtectedRoute>*/
+          <ProtectedRoute>
             <Cart />
-         /* </ProtectedRoute>*/ //sacar comentarios para porteger rutas//
+          </ProtectedRoute>
         ),
       },
       {
@@ -49,18 +52,58 @@ export const router = createBrowserRouter([
       {
         path: 'admin',
         element: (
-        /*  <ProtectedRoute adminOnly>*/
+          <ProtectedRoute adminOnly>
             <AdminDashboard />
-         /* </ProtectedRoute>*/
+          </ProtectedRoute>
         ),
-      },
-      {
-        path: '*',
-        element: <NotFound />,
       },
       {
         path: 'build-your-pc',
         element: <BuildYourPc />,
+      },
+      {
+        path: 'checkout',
+        element: (
+          <ProtectedRoute>
+            <Checkout />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'success',
+        element: <PaymentStatus />,
+      },
+      {
+        path: 'failure',
+        element: <PaymentStatus />,
+      },
+      {
+        path: 'pending',
+        element: <PaymentStatus />,
+      },
+      {
+        path: 'about',
+        element: <AboutUs />,
+      },
+      {
+        path: 'contact',
+        element: <ContactPage />,
+      },
+      {
+        path: 'support',
+        element: <StaticInfo />,
+      },
+      {
+        path: 'privacy',
+        element: <StaticInfo />,
+      },
+      {
+        path: 'terms',
+        element: <StaticInfo />,
+      },
+      {
+        path: '*',
+        element: <NotFound />,
       },
     ],
   },
