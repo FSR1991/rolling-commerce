@@ -9,6 +9,7 @@ const formatCurrency = (value) =>
   new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
+    currencyDisplay: 'code',
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 

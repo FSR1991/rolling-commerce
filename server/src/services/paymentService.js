@@ -103,6 +103,9 @@ const getSafePreferencePayloadForLog = (body) => ({
 const buildPreferenceBody = ({ preferenceItems, sanitizedCheckoutData, order }) => {
   const clientUrl = getClientUrl();
   const backendUrl = getBackendUrl();
+  const orderId = order._id.toString();
+  const buildReturnUrl = (path) =>
+    `${clientUrl}/${path}?orderId=${encodeURIComponent(orderId)}`;
   const body = {
     items: preferenceItems.map((item) => ({
       id: item.productId,
@@ -118,12 +121,12 @@ const buildPreferenceBody = ({ preferenceItems, sanitizedCheckoutData, order }) 
     },
 
     back_urls: {
-      success: `${clientUrl}/success`,
-      failure: `${clientUrl}/failure`,
-      pending: `${clientUrl}/pending`,
+      success: buildReturnUrl("success"),
+      failure: buildReturnUrl("failure"),
+      pending: buildReturnUrl("pending"),
     },
 
-    external_reference: order._id.toString(),
+    external_reference: orderId,
 
     ...(isPublicUrl(clientUrl) && {
       auto_return: "approved",
@@ -199,6 +202,7 @@ const createMercadoPagoPreference = async ({
   });
 
   return {
+    orderId: order._id.toString(),
     preferenceId: response.id,
     checkoutUrl: getCheckoutUrl(response),
   };

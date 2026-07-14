@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
+import { getOrderByIdRequest } from '../routes/orderService';
 
 const statusConfig = {
   '/success': {
@@ -24,26 +25,92 @@ const statusConfig = {
   },
 };
 
-let successCartClearInFlight = false;
-
 export default function PaymentStatus() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { clearCartAfterApprovedPayment } = useCart();
-  const config = statusConfig[pathname] || statusConfig['/pending'];
+  const [verification, setVerification] = useState(
+    pathname === '/success' ? 'loading' : 'idle',
+  );
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const cartClearedRef = useRef(false);
+  const orderId = useMemo(
+    () => new URLSearchParams(search).get('orderId') || '',
+    [search],
+  );
+  const baseConfig = statusConfig[pathname] || statusConfig['/pending'];
+  const config =
+    pathname === '/success' && verification !== 'paid'
+      ? {
+          ...statusConfig['/pending'],
+          title: verification === 'loading' ? 'Verificando pago' : 'Pago pendiente de confirmacion',
+          message:
+            verificationMessage ||
+            'Todavia no pudimos confirmar el pago. Tu carrito se conserva hasta recibir la confirmacion.',
+        }
+      : baseConfig;
   const Icon = config.icon;
   const isSuccess = pathname === '/success';
 
   useEffect(() => {
     if (!isSuccess) return;
-    if (successCartClearInFlight) return;
+    if (!orderId) {
+      queueMicrotask(() => {
+        setVerification('pending');
+        setVerificationMessage(
+          'No recibimos una referencia de orden valida. Tu carrito no fue modificado.',
+        );
+      });
+      return;
+    }
 
-    successCartClearInFlight = true;
-    clearCartAfterApprovedPayment().catch((error) => {
-      console.error('No se pudo limpiar el carrito despues del pago aprobado:', error);
-    }).finally(() => {
-      successCartClearInFlight = false;
-    });
-  }, [clearCartAfterApprovedPayment, isSuccess]);
+    let active = true;
+
+    const verifyPayment = async () => {
+      try {
+        setVerification('loading');
+        setVerificationMessage('');
+        const order = await getOrderByIdRequest(orderId);
+        const isConfirmed = order?.status === 'paid' || order?.status === 'delivered';
+
+        if (!active) return;
+
+        if (!isConfirmed) {
+          setVerification('pending');
+          setVerificationMessage(
+            'Mercado Pago regreso al sitio, pero la orden aun no figura como pagada. Tu carrito se conserva.',
+          );
+          return;
+        }
+
+        setVerification('paid');
+
+        if (!cartClearedRef.current) {
+          cartClearedRef.current = true;
+          try {
+            await clearCartAfterApprovedPayment();
+          } catch (clearError) {
+            console.error(
+              'El pago fue confirmado, pero no se pudo limpiar el carrito:',
+              clearError,
+            );
+          }
+        }
+      } catch (error) {
+        if (!active) return;
+        setVerification('pending');
+        setVerificationMessage(
+          error?.message ||
+            'No pudimos verificar el pago. Tu carrito no fue modificado.',
+        );
+      }
+    };
+
+    verifyPayment();
+
+    return () => {
+      active = false;
+    };
+  }, [clearCartAfterApprovedPayment, isSuccess, orderId]);
 
   return (
     <section style={styles.page}>

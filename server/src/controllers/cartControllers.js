@@ -76,8 +76,8 @@ export const addItem = async (req, res) => {
     }
 
     const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+    if (!product || product.isActive === false) {
+      return res.status(404).json({ message: "Product not found or inactive" });
     }
 
     const itemQuantity = quantity === undefined ? 1 : parseQuantity(quantity);
@@ -156,6 +156,18 @@ export const updateItem = async (req, res) => {
     if (itemQuantity === 0) {
       cart.items.splice(itemIndex, 1);
     } else {
+      const product = await Product.findById(productId);
+
+      if (!product || product.isActive === false) {
+        return res.status(404).json({ message: "Product not found or inactive" });
+      }
+
+      if (itemQuantity > product.stock) {
+        return res.status(400).json({
+          message: `Requested quantity exceeds stock. Available: ${product.stock}`,
+        });
+      }
+
       cart.items[itemIndex].quantity = itemQuantity;
     }
 

@@ -78,6 +78,7 @@ const orderSchema = new mongoose.Schema(
     deliveredAt: { type: Date },
     cancelledAt: { type: Date },
     stockReducedAt: { type: Date },
+    stockRestoredAt: { type: Date },
   },
   {
     timestamps: true,

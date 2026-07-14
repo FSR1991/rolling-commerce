@@ -1,9 +1,10 @@
-export const formatPrice = (value, currency = 'USD') => {
+export const formatPrice = (value, currency = 'ARS') => {
   const amount = Number(value || 0);
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency,
+    currencyDisplay: 'code',
   }).format(amount);
 };
 

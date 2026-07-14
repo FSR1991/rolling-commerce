@@ -16,7 +16,12 @@ const STATUS_CLASSES = {
   delivered: 'admin-status-badge admin-status-delivered',
 };
 
-const CLEANABLE_STATUSES = new Set(['pending', 'cancelled', 'rejected']);
+const ALLOWED_STATUS_TRANSITIONS = {
+  pending: ['pending', 'paid', 'cancelled'],
+  paid: ['paid', 'delivered', 'cancelled'],
+  cancelled: ['cancelled'],
+  delivered: ['delivered'],
+};
 
 const AdminSalesTable = ({
   orders,
@@ -70,7 +75,12 @@ const AdminSalesTable = ({
               const status = String(order?.status || 'pending').toLowerCase();
               const isUpdating = updatingOrderId === orderId;
               const canCancel = status === 'pending';
-              const canDelete = CLEANABLE_STATUSES.has(status);
+              const canDelete =
+                status === 'cancelled' &&
+                !order?.payment?.preferenceId &&
+                !order?.payment?.paymentId &&
+                (!order?.stockReducedAt || Boolean(order?.stockRestoredAt));
+              const allowedStatuses = ALLOWED_STATUS_TRANSITIONS[status] || [status];
 
               return (
                 <tr key={orderId}>
@@ -94,9 +104,9 @@ const AdminSalesTable = ({
                         disabled={isUpdating}
                         aria-label={`Cambiar estado de venta ${getShortId(order)}`}
                       >
-                        {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                        {allowedStatuses.map((value) => (
                           <option key={value} value={value}>
-                            {label}
+                            {STATUS_LABELS[value] || value}
                           </option>
                         ))}
                       </select>

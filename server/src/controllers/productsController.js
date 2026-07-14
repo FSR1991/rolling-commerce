@@ -50,7 +50,7 @@ const getProductsController = async (req, res, next) => {
     const products = await getProducts({ 
       category, 
       search, 
-      includeInactive: includeInactive === "true" 
+      includeInactive: includeInactive === "true" && req.user?.role === "admin"
     });
     res.json(products);
   } catch (error) {
