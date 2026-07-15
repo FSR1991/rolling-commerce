@@ -103,7 +103,7 @@ const AdminProductsTable = ({
     <Dropdown.Toggle
       variant="outline-light"
       size="sm"
-      className="admin-product-action-toggle"
+      className="admin-product-action-toggle no-caret"
     >
       <i className="bi bi-three-dots-vertical" />
     </Dropdown.Toggle>
