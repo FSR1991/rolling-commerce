@@ -256,7 +256,12 @@ const AdminSalesPage = ({ onOrdersChanged }) => {
   const handleDeleteOrder = async (order) => {
     const orderId = getOrderId(order);
     const status = String(order?.status || '').toLowerCase();
-    if (!isValidOrderId(orderId) || !['pending', 'cancelled', 'rejected'].includes(status)) return;
+    const canDelete =
+      status === 'cancelled' &&
+      !order?.payment?.preferenceId &&
+      !order?.payment?.paymentId &&
+      (!order?.stockReducedAt || Boolean(order?.stockRestoredAt));
+    if (!isValidOrderId(orderId) || !canDelete) return;
 
     const confirmation = await Swal.fire({
       title: 'Eliminar orden',

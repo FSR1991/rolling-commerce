@@ -36,6 +36,14 @@ const mapMessageSummary = (message) => ({
   updatedAt: message.updatedAt,
 });
 
+const mapProductSummary = (product) => ({
+  id: product._id,
+  name: product.name,
+  isActive: product.isActive !== false,
+  createdAt: product.createdAt,
+  updatedAt: product.updatedAt,
+});
+
 const buildSalesLast7Days = async () => {
   const todayStart = startOfLocalDay(new Date());
   const from = new Date(todayStart.getTime() - 6 * DAY_IN_MS);
@@ -135,11 +143,15 @@ export const getAdminStats = async () => {
   const [
     totalSalesResult,
     totalProducts,
+    inactiveProducts,
     pendingOrders,
     pendingMessages,
     recentOrders,
     recentMessages,
     recentProducts,
+    latestPaidOrder,
+    latestProduct,
+    latestPendingOrder,
     salesLast7Days,
   ] = await Promise.all([
     Order.aggregate([
@@ -147,6 +159,7 @@ export const getAdminStats = async () => {
       { $group: { _id: null, total: { $sum: "$total" } } },
     ]),
     Product.countDocuments({ isActive: { $ne: false } }),
+    Product.countDocuments({ isActive: false }),
     Order.countDocuments({ status: "pending" }),
     ContactMessage.countDocuments({ status: "pending" }),
     Order.find({})
@@ -163,6 +176,18 @@ export const getAdminStats = async () => {
       .limit(5)
       .select("name isActive createdAt updatedAt")
       .lean(),
+    Order.findOne({ status: { $in: PAID_STATUSES } })
+      .sort({ paidAt: -1, updatedAt: -1, createdAt: -1 })
+      .populate("userId", "name email")
+      .lean(),
+    Product.findOne({})
+      .sort({ createdAt: -1 })
+      .select("name isActive createdAt updatedAt")
+      .lean(),
+    Order.findOne({ status: "pending" })
+      .sort({ createdAt: -1 })
+      .populate("userId", "name email")
+      .lean(),
     buildSalesLast7Days(),
   ]);
 
@@ -175,6 +200,13 @@ export const getAdminStats = async () => {
     pendingMessages,
     recentOrders: recentOrders.map(mapOrderSummary),
     recentMessages: recentMessages.map(mapMessageSummary),
+    recentProducts: recentProducts.map(mapProductSummary),
+    inactiveProducts,
+    latestOrder: recentOrders[0] ? mapOrderSummary(recentOrders[0]) : null,
+    latestPaidOrder: latestPaidOrder ? mapOrderSummary(latestPaidOrder) : null,
+    latestProduct: latestProduct ? mapProductSummary(latestProduct) : null,
+    latestPendingOrder: latestPendingOrder ? mapOrderSummary(latestPendingOrder) : null,
+    updatedAt: new Date().toISOString(),
     salesLast7Days,
     recentActivity: buildRecentActivity({ recentOrders, recentMessages, recentProducts }),
   };

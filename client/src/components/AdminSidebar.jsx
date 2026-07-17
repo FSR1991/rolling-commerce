@@ -1,10 +1,20 @@
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+
 const AdminSidebar = ({ activeTab, setActiveTab }) => {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const navItems = [
     { id: 'dashboard', label: 'Tablero', icon: 'bi-speedometer2' },
     { id: 'products', label: 'Productos', icon: 'bi-box' },
     { id: 'sales', label: 'Ventas', icon: 'bi-receipt' },
     { id: 'contacts', label: 'Consultas', icon: 'bi-chat-left-text' },
   ];
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <aside className="admin-sidebar p-4 d-flex flex-column">
@@ -22,7 +32,7 @@ const AdminSidebar = ({ activeTab, setActiveTab }) => {
           </button>
         ))}
       </nav>
-      <button type="button" className="btn btn-outline-danger admin-sidebar-logout mt-auto">
+      <button type="button" className="btn btn-outline-danger admin-sidebar-logout mt-auto" onClick={handleLogout}>
         <i className="bi bi-box-arrow-right me-2" aria-hidden="true" />
         Cerrar sesion
       </button>

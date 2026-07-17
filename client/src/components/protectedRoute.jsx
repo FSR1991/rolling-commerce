@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function ProtectedRoute({ children, adminOnly = false }) {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { isAuthenticated, isAdmin, loading, token, error } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -10,6 +10,10 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
   }
 
   if (!isAuthenticated) {
+    if (token && error) {
+      return <p>{error}</p>;
+    }
+
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

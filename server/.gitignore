@@ -1,5 +1,12 @@
 node_modules/
-.env
 dist/
 build/
 *.log
+
+# Environment files with real credentials
+.env
+.env.*
+!.env.example
+
+logs/
+coverage/

@@ -4,10 +4,11 @@ import Product from "../models/products.js";
 import User from "../models/users.js";
 import mongoose from "mongoose";
 import { ORDER_STATUSES } from "../constants/orderStatuses.js";
+import { canTransitionOrderStatus } from "../constants/orderTransitions.js";
 import { sanitizeLimitedString } from "../utils/validators.js";
 
 const ORDER_SORT_FIELDS = new Set(["createdAt", "total"]);
-const DELETABLE_ORDER_STATUSES = new Set(["pending", "cancelled", "rejected"]);
+const DELETABLE_ORDER_STATUSES = new Set(["cancelled"]);
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -28,11 +29,35 @@ const buildCheckoutSnapshot = (checkoutData = {}) => ({
 });
 
 const getStatusTimestampPatch = (status) => {
-  if (status === "paid") return { paidAt: new Date() };
   if (status === "delivered") return { deliveredAt: new Date() };
-  if (status === "cancelled") return { cancelledAt: new Date() };
   return {};
 };
+
+const createOrderConflictError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 409;
+  return error;
+};
+
+const assertOrderStatusTransition = (currentStatus, nextStatus) => {
+  if (!canTransitionOrderStatus(currentStatus, nextStatus)) {
+    throw createOrderConflictError(
+      `Invalid order status transition: ${currentStatus} -> ${nextStatus}`
+    );
+  }
+};
+
+const buildPaymentPatch = (
+  order,
+  { paymentId, paymentStatus, statusDetail } = {}
+) => ({
+  ...(order.payment?.toObject?.() || order.payment || {}),
+  provider: order.payment?.provider || "mercadopago",
+  paymentId: paymentId ? String(paymentId) : order.payment?.paymentId,
+  status: paymentStatus || order.payment?.status,
+  statusDetail:
+    statusDetail !== undefined ? statusDetail : order.payment?.statusDetail,
+});
 
 const mapPaymentStatusToOrderStatus = (paymentStatus = "") => {
   const normalizedStatus = String(paymentStatus || "").toLowerCase();
@@ -68,7 +93,7 @@ const validateOrderItems = async (items) => {
 
     const product = await Product.findById(item.productId);
 
-    if (!product) {
+    if (!product || product.isActive === false) {
       throw new Error(`Product ${item.productId} not found`);
     }
 
@@ -124,7 +149,7 @@ const createOrder = async (userId, cartData = null) => {
 
       const product = await Product.findById(item.productId).session(session);
 
-      if (!product) {
+      if (!product || product.isActive === false) {
         throw new Error(`Product ${item.productId} not found`);
       }
 
@@ -417,12 +442,29 @@ const updateOrderStatus = async (orderId, newStatus) => {
     );
   }
 
+  if (newStatus === "paid") {
+    return markOrderPaid({
+      orderId,
+      paymentStatus: "approved",
+      statusDetail: "manual_admin_approval",
+    });
+  }
+
+  if (newStatus === "cancelled") {
+    return cancelOrder(orderId);
+  }
+
   const order = await Order.findById(orderId);
 
   if (!order) {
     throw new Error("Order not found");
   }
 
+  if (order.status === newStatus) {
+    return order;
+  }
+
+  assertOrderStatusTransition(order.status, newStatus);
   order.status = newStatus;
   Object.assign(order, getStatusTimestampPatch(newStatus));
   await order.save();
@@ -453,7 +495,7 @@ const attachPaymentPreference = async (orderId, preferenceId) => {
   return order;
 };
 
-const markOrderPaidFromPayment = async ({
+const markOrderPaid = async ({
   orderId,
   paymentId,
   paymentStatus = "approved",
@@ -475,35 +517,60 @@ const markOrderPaidFromPayment = async ({
       throw error;
     }
 
-    const shouldReduceStock = order.status !== "paid" && !order.stockReducedAt;
+    if (order.status === "delivered") {
+      if (!order.stockReducedAt || order.stockRestoredAt) {
+        throw createOrderConflictError(
+          "Delivered order has inconsistent stock markers"
+        );
+      }
 
-    if (shouldReduceStock) {
+      order.payment = buildPaymentPatch(order, {
+        paymentId,
+        paymentStatus,
+        statusDetail,
+      });
+      await order.save({ session });
+      await session.commitTransaction();
+      session.endSession();
+      return order;
+    }
+
+    assertOrderStatusTransition(order.status, "paid");
+
+    if (order.stockRestoredAt) {
+      throw createOrderConflictError(
+        "Cannot mark an order as paid after stock was restored"
+      );
+    }
+
+    if (!order.stockReducedAt) {
       for (const item of order.items) {
         const updatedProduct = await Product.findOneAndUpdate(
-          { _id: item.productId, stock: { $gte: item.quantity } },
+          {
+            _id: item.productId,
+            stock: { $gte: item.quantity },
+          },
           { $inc: { stock: -item.quantity } },
           { new: true, session }
         );
 
         if (!updatedProduct) {
-          throw new Error(`Insufficient stock for product "${item.productId}" during payment confirmation`);
+          throw createOrderConflictError(
+            `Insufficient stock for product "${item.productId}" during payment confirmation`
+          );
         }
       }
 
-      order.stockReducedAt = new Date();
-    } else if (order.status === "paid" && !order.stockReducedAt) {
       order.stockReducedAt = new Date();
     }
 
     order.status = "paid";
     order.paidAt = order.paidAt || new Date();
-    order.payment = {
-      ...(order.payment?.toObject?.() || order.payment || {}),
-      provider: order.payment?.provider || "mercadopago",
-      paymentId: paymentId ? String(paymentId) : order.payment?.paymentId,
-      status: paymentStatus,
+    order.payment = buildPaymentPatch(order, {
+      paymentId,
+      paymentStatus,
       statusDetail,
-    };
+    });
 
     await order.save({ session });
     await session.commitTransaction();
@@ -526,7 +593,7 @@ const syncOrderFromPayment = async ({
   const nextOrderStatus = mapPaymentStatusToOrderStatus(paymentStatus);
 
   if (nextOrderStatus === "paid") {
-    return markOrderPaidFromPayment({
+    return markOrderPaid({
       orderId,
       paymentId,
       paymentStatus,
@@ -538,6 +605,14 @@ const syncOrderFromPayment = async ({
     throw new Error("Invalid order ID format");
   }
 
+  if (nextOrderStatus === "cancelled") {
+    return cancelOrder(orderId, null, {
+      paymentId,
+      paymentStatus,
+      statusDetail,
+    });
+  }
+
   const order = await Order.findById(orderId);
 
   if (!order) {
@@ -546,57 +621,90 @@ const syncOrderFromPayment = async ({
     throw error;
   }
 
-  if (order.status !== "paid" || nextOrderStatus === "cancelled") {
-    order.status = nextOrderStatus;
-    if (nextOrderStatus === "cancelled") {
-      order.cancelledAt = order.cancelledAt || new Date();
-    }
+  if (order.status !== "pending") {
+    return order;
   }
 
-  order.payment = {
-    ...(order.payment?.toObject?.() || order.payment || {}),
-    provider: order.payment?.provider || "mercadopago",
-    paymentId: paymentId ? String(paymentId) : order.payment?.paymentId,
-    status: paymentStatus,
+  assertOrderStatusTransition(order.status, nextOrderStatus);
+  order.payment = buildPaymentPatch(order, {
+    paymentId,
+    paymentStatus,
     statusDetail,
-  };
+  });
 
   await order.save();
 
   return order;
 };
 
-const cancelOrder = async (orderId, userId = null) => {
+const cancelOrder = async (
+  orderId,
+  userId = null,
+  { paymentId, paymentStatus, statusDetail } = {}
+) => {
   if (!mongoose.Types.ObjectId.isValid(orderId)) {
     throw new Error("Invalid order ID format");
   }
 
-  const order = await Order.findById(orderId);
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (!order) {
-    const error = new Error("Order not found");
-    error.statusCode = 404;
+  try {
+    const order = await Order.findById(orderId).session(session);
+
+    if (!order) {
+      const error = new Error("Order not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (userId && String(order.userId) !== String(userId)) {
+      const error = new Error("Access denied. Cannot cancel this order");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    assertOrderStatusTransition(order.status, "cancelled");
+
+    if (order.stockReducedAt && !order.stockRestoredAt) {
+      for (const item of order.items) {
+        const restoredProduct = await Product.findByIdAndUpdate(
+          item.productId,
+          { $inc: { stock: item.quantity } },
+          { new: true, session }
+        );
+
+        if (!restoredProduct) {
+          throw createOrderConflictError(
+            `Cannot restore stock for missing product "${item.productId}"`
+          );
+        }
+      }
+
+      order.stockRestoredAt = new Date();
+    }
+
+    order.status = "cancelled";
+    order.cancelledAt = order.cancelledAt || new Date();
+
+    if (paymentId || paymentStatus || statusDetail !== undefined) {
+      order.payment = buildPaymentPatch(order, {
+        paymentId,
+        paymentStatus,
+        statusDetail,
+      });
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+
+    return order;
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     throw error;
   }
-
-  // Si se proporciona userId, verificar que sea el propietario
-  if (userId && String(order.userId) !== String(userId)) {
-    const error = new Error("Access denied. Cannot cancel this order");
-    error.statusCode = 403;
-    throw error;
-  }
-
-  if (order.status !== "pending") {
-    const error = new Error(`Cannot cancel order with status "${order.status}"`);
-    error.statusCode = 409;
-    throw error;
-  }
-
-  order.status = "cancelled";
-  order.cancelledAt = order.cancelledAt || new Date();
-  await order.save();
-
-  return order;
 };
 
 const deleteOrder = async (orderId) => {
@@ -618,6 +726,18 @@ const deleteOrder = async (orderId) => {
     throw error;
   }
 
+  if (order.payment?.preferenceId || order.payment?.paymentId) {
+    throw createOrderConflictError(
+      "Cannot delete an order linked to a payment"
+    );
+  }
+
+  if (order.stockReducedAt && !order.stockRestoredAt) {
+    throw createOrderConflictError(
+      "Cannot delete an order while stock remains reduced"
+    );
+  }
+
   await order.deleteOne();
 
   return order;
@@ -633,7 +753,7 @@ export {
   cancelOrder,
   deleteOrder,
   attachPaymentPreference,
-  markOrderPaidFromPayment,
+  markOrderPaid,
   syncOrderFromPayment,
   calculateOrderTotal,
   validateOrderItems,
