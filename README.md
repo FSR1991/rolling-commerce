@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="client/src/assets/logo.png" alt="Tech Core" width="220" />
+  <img
+    src="./client/src/assets/logooscuro.png"
+    alt="Logo de Tech Core"
+    width="500"
+  />
 </p>
 
 <h1 align="center">Rolling Commerce</h1>
